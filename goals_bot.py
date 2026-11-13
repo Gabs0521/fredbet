@@ -1,6 +1,9 @@
 import os
 import requests
 import psycopg2
+import http.server
+import socketserver
+import threading
 
 TELEGRAM_BOT_TOKEN = "9099278569:AAEXXy_-aTojgls8UquwGBcy5n80eCsIgTA"
 TELEGRAM_CHAT_ID = "8286139008"
@@ -38,7 +41,21 @@ def init_db():
     except Exception as e:
         print(f"Database error: {e}")
 
+# Dummy web server so Render's Web Service stays active
+def run_web_server():
+    PORT = int(os.environ.get("PORT", 10000))
+    Handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        print(f"Serving web port {PORT}")
+        httpd.serve_forever()
+
 if __name__ == "__main__":
     init_db()
     send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live and Connected!**")
-    print("Test alert sent to Telegram!")
+    
+    # Start the web server in a background thread so the app stays alive
+    server_thread = threading.Thread(target=run_web_server, daemon=True)
+    server_thread.start()
+    
+    # Keep main thread alive
+    server_thread.join()
