@@ -4,6 +4,7 @@ import psycopg2
 import http.server
 import socketserver
 import threading
+import time
 
 TELEGRAM_BOT_TOKEN = "9099278569:AAEXXy_-aTojgls8UquwGBcy5n80eCsIgTA"
 TELEGRAM_CHAT_ID = "8286139008"
@@ -41,7 +42,42 @@ def init_db():
     except Exception as e:
         print(f"Database error: {e}")
 
-# Dummy web server so Render's Web Service stays active
+def check_and_save_prediction(match_name, prediction_text):
+    """Saves match prediction to Neon DB and sends alert only if it's new."""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        
+        # Check if match already exists in database
+        cur.execute("SELECT id FROM goal_predictions WHERE match_name = %s", (match_name,))
+        exists = cur.fetchone()
+        
+        if not exists:
+            # Insert new prediction
+            cur.execute(
+                "INSERT INTO goal_predictions (match_name, prediction) VALUES (%s, %s)",
+                (match_name, prediction_text)
+            )
+            conn.commit()
+            
+            # Send Telegram Alert
+            alert_message = (
+                f"🎯 **New Over 1.5 Goals Prediction!**\n\n"
+                f"⚽ **Match:** {match_name}\n"
+                f"📊 **Tip:** {prediction_text}\n"
+                f"🔥 *Confidence: High*"
+            )
+            send_telegram_alert(alert_message)
+            print(f"New prediction saved and alerted: {match_name}")
+        else:
+            print(f"Match already processed: {match_name}")
+            
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Database / Prediction error: {e}")
+
+# Dummy web server to keep Render's Web Service active
 def run_web_server():
     PORT = int(os.environ.get("PORT", 10000))
     Handler = http.server.SimpleHTTPRequestHandler
@@ -51,11 +87,15 @@ def run_web_server():
 
 if __name__ == "__main__":
     init_db()
-    send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live and Connected!**")
+    send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live and Ready for Predictions!**")
     
-    # Start the web server in a background thread so the app stays alive
+    # Start web server in background thread
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
+    
+    # Example test prediction loop/logic check
+    # (Here is where you can plug in your match scanner or API loop later)
+    check_and_save_prediction("Arsenal vs Chelsea", "Over 1.5 Goals (Stats: 85% Over 1.5 trend)")
     
     # Keep main thread alive
     server_thread.join()
