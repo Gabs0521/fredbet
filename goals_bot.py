@@ -64,7 +64,7 @@ def check_and_save_prediction(match_name, prediction_text):
                 f"🎯 **New Over 1.5 Goals Pick!**\n\n"
                 f"⚽ **Match:** {match_name}\n"
                 f"📊 **Tip:** {prediction_text}\n"
-                f"🔥 *Source: Live API Scan*"
+                f"🔥 *Source: Automated Scan*"
             )
             send_telegram_alert(alert_message)
             print(f"New prediction saved and alerted: {match_name}")
@@ -77,31 +77,36 @@ def check_and_save_prediction(match_name, prediction_text):
         print(f"Database / Prediction error: {e}")
 
 def fetch_live_fixtures():
-    """Fetches upcoming matches from football-data.org (e.g. Premier League - PL)"""
+    """Fetches upcoming matches from football-data.org (Premier League - PL)"""
     url = "https://api.football-data.org/v4/competitions/PL/matches?status=SCHEDULED"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     
     try:
+        print("Scanning for upcoming fixtures...")
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             data = response.json()
             matches = data.get("matches", [])
             print(f"Successfully fetched {len(matches)} upcoming matches.")
             
-            # Scan matches for our Over 1.5 model logic
-            for match in matches[:5]: # Check top 5 upcoming matches as an example
+            for match in matches[:5]:
                 home = match['homeTeam']['name']
                 away = match['awayTeam']['name']
                 match_name = f"{home} vs {away}"
-                match_date = match['utcDate']
                 
-                # Simple Over 1.5 strategy filter (e.g., matching fixture analysis)
-                prediction_text = "Over 1.5 Goals (Live API Filter)"
+                prediction_text = "Over 1.5 Goals (Automated Scan Filter)"
                 check_and_save_prediction(match_name, prediction_text)
         else:
             print(f"API Error: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Error fetching fixtures: {e}")
+
+def background_scheduler():
+    """Continuously runs the fixture scan every 4 hours automatically"""
+    while True:
+        fetch_live_fixtures()
+        # Sleep for 4 hours (4 * 60 * 60 seconds) before next scan
+        time.sleep(14400)
 
 def run_web_server():
     PORT = int(os.environ.get("PORT", 10000))
@@ -112,12 +117,15 @@ def run_web_server():
 
 if __name__ == "__main__":
     init_db()
-    send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live with Live API Integration!**")
+    send_telegram_alert("🤖 **Over 1.5 Goals Bot is Live with Automated Background Scanning!**")
     
+    # Start web server in background thread to keep Render happy
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
     
-    # Run fixture check on startup
-    fetch_live_fixtures()
+    # Start automated background scheduling thread
+    scheduler_thread = threading.Thread(target=background_scheduler, daemon=True)
+    scheduler_thread.start()
     
+    # Keep main thread alive
     server_thread.join()
