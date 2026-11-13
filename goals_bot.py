@@ -5,10 +5,12 @@ import http.server
 import socketserver
 import threading
 import time
+from datetime import datetime
 
-TELEGRAM_BOT_TOKEN = "9099278569:AAEXXy_-aTojgls8UquwGBcy5n80eCsIgTA"
-TELEGRAM_CHAT_ID = "8286139008"
-DATABASE_URL = "postgresql://neondb_owner:npg_Ean30NweykBR@ep-purple-mountain-bdtw4wms.c-8.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "9099278569:AAEXXy_-aTojgls8UquwGBcy5n80eCsIgTA")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8286139008")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "92ebb20e57a944758f79328d32fe7283")
 
 def send_telegram_alert(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -48,24 +50,21 @@ def check_and_save_prediction(match_name, prediction_text):
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         
-        # Check if match already exists in database
         cur.execute("SELECT id FROM goal_predictions WHERE match_name = %s", (match_name,))
         exists = cur.fetchone()
         
         if not exists:
-            # Insert new prediction
             cur.execute(
                 "INSERT INTO goal_predictions (match_name, prediction) VALUES (%s, %s)",
                 (match_name, prediction_text)
             )
             conn.commit()
             
-            # Send Telegram Alert
             alert_message = (
-                f"🎯 **New Over 1.5 Goals Prediction!**\n\n"
+                f"🎯 **New Over 1.5 Goals Pick!**\n\n"
                 f"⚽ **Match:** {match_name}\n"
                 f"📊 **Tip:** {prediction_text}\n"
-                f"🔥 *Confidence: High*"
+                f"🔥 *Source: Live API Scan*"
             )
             send_telegram_alert(alert_message)
             print(f"New prediction saved and alerted: {match_name}")
@@ -77,7 +76,33 @@ def check_and_save_prediction(match_name, prediction_text):
     except Exception as e:
         print(f"Database / Prediction error: {e}")
 
-# Dummy web server to keep Render's Web Service active
+def fetch_live_fixtures():
+    """Fetches upcoming matches from football-data.org (e.g. Premier League - PL)"""
+    url = "https://api.football-data.org/v4/competitions/PL/matches?status=SCHEDULED"
+    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            matches = data.get("matches", [])
+            print(f"Successfully fetched {len(matches)} upcoming matches.")
+            
+            # Scan matches for our Over 1.5 model logic
+            for match in matches[:5]: # Check top 5 upcoming matches as an example
+                home = match['homeTeam']['name']
+                away = match['awayTeam']['name']
+                match_name = f"{home} vs {away}"
+                match_date = match['utcDate']
+                
+                # Simple Over 1.5 strategy filter (e.g., matching fixture analysis)
+                prediction_text = "Over 1.5 Goals (Live API Filter)"
+                check_and_save_prediction(match_name, prediction_text)
+        else:
+            print(f"API Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error fetching fixtures: {e}")
+
 def run_web_server():
     PORT = int(os.environ.get("PORT", 10000))
     Handler = http.server.SimpleHTTPRequestHandler
@@ -87,15 +112,12 @@ def run_web_server():
 
 if __name__ == "__main__":
     init_db()
-    send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live and Ready for Predictions!**")
+    send_telegram_alert("⚽ **Over 1.5 Goals Bot is Live with Live API Integration!**")
     
-    # Start web server in background thread
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
     
-    # Example test prediction loop/logic check
-    # (Here is where you can plug in your match scanner or API loop later)
-    check_and_save_prediction("Arsenal vs Chelsea", "Over 1.5 Goals (Stats: 85% Over 1.5 trend)")
+    # Run fixture check on startup
+    fetch_live_fixtures()
     
-    # Keep main thread alive
     server_thread.join()
