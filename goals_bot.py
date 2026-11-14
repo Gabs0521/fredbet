@@ -64,7 +64,7 @@ def check_and_save_prediction(match_name, prediction_text):
                 f"🎯 **New Over 1.5 Goals Pick!**\n\n"
                 f"⚽ **Match:** {match_name}\n"
                 f"📊 **Tip:** {prediction_text}\n"
-                f"🔥 *Source: Automated Scan*"
+                f"🔥 *Source: Multi-League Scan*"
             )
             send_telegram_alert(alert_message)
             print(f"New prediction saved and alerted: {match_name}")
@@ -77,35 +77,38 @@ def check_and_save_prediction(match_name, prediction_text):
         print(f"Database / Prediction error: {e}")
 
 def fetch_live_fixtures():
-    """Fetches upcoming matches from football-data.org (Premier League - PL)"""
-    url = "https://api.football-data.org/v4/competitions/PL/matches?status=SCHEDULED"
+    """Fetches upcoming matches across multiple major European leagues"""
+    # PL = Premier League, PD = La Liga, SA = Serie A, BL1 = Bundesliga, CL = Champions League
+    competitions = ["PL", "PD", "SA", "BL1", "CL"]
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     
-    try:
-        print("Scanning for upcoming fixtures...")
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            matches = data.get("matches", [])
-            print(f"Successfully fetched {len(matches)} upcoming matches.")
-            
-            for match in matches[:5]:
-                home = match['homeTeam']['name']
-                away = match['awayTeam']['name']
-                match_name = f"{home} vs {away}"
+    for comp in competitions:
+        url = f"https://api.football-data.org/v4/competitions/{comp}/matches?status=SCHEDULED"
+        try:
+            print(f"Scanning competition: {comp}...")
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                matches = data.get("matches", [])
+                print(f"Found {len(matches)} matches for {comp}")
                 
-                prediction_text = "Over 1.5 Goals (Automated Scan Filter)"
-                check_and_save_prediction(match_name, prediction_text)
-        else:
-            print(f"API Error: {response.status_code} - {response.text}")
-    except Exception as e:
-        print(f"Error fetching fixtures: {e}")
+                for match in matches[:3]: # Check top 3 upcoming matches per league per scan
+                    home = match['homeTeam']['name']
+                    away = match['awayTeam']['name']
+                    match_name = f"{home} vs {away}"
+                    
+                    prediction_text = f"Over 1.5 Goals ({comp} Multi-League Filter)"
+                    check_and_save_prediction(match_name, prediction_text)
+            else:
+                print(f"API Error for {comp}: {response.status_code}")
+        except Exception as e:
+            print(f"Error fetching {comp}: {e}")
 
 def background_scheduler():
-    """Continuously runs the fixture scan every 4 hours automatically"""
+    """Continuously runs the multi-league fixture scan every 4 hours automatically"""
     while True:
         fetch_live_fixtures()
-        # Sleep for 4 hours (4 * 60 * 60 seconds) before next scan
+        # Sleep for 4 hours (4 * 60 * 60 seconds)
         time.sleep(14400)
 
 def run_web_server():
@@ -117,15 +120,12 @@ def run_web_server():
 
 if __name__ == "__main__":
     init_db()
-    send_telegram_alert("🤖 **Over 1.5 Goals Bot is Live with Automated Background Scanning!**")
+    send_telegram_alert("🤖 **Over 1.5 Goals Bot is Live with Multi-League Scanning!**")
     
-    # Start web server in background thread to keep Render happy
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
     
-    # Start automated background scheduling thread
     scheduler_thread = threading.Thread(target=background_scheduler, daemon=True)
     scheduler_thread.start()
     
-    # Keep main thread alive
     server_thread.join()
